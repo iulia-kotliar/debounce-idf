@@ -1,0 +1,6 @@
+# Період тика FreeRTOS. Критично для вимірювань: при дефолтних 100 Гц
+# vTaskDelay(1) дає 10 мс, і POLL_MS=5 у режимі polling втрачає сенс.
+CONFIG_FREERTOS_HZ=1000
+
+# Плата ESP32-S3-N16R8: 16 МБ флешу.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y

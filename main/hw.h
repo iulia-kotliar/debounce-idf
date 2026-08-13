@@ -2,6 +2,8 @@
 
 #include "driver/gpio.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #include <stdint.h>
 
@@ -28,3 +30,18 @@ bool hwPullupEnabled();
 static inline uint32_t millis() {
     return (uint32_t)(esp_timer_get_time() / 1000);
 }
+
+// --- Спільне джерело фронтів ----------------------------------------------
+// Три режими з чотирьох налаштовують пін однаково: переривання по спаду,
+// обробник кладе мітку часу в чергу. Різниця між ними — виключно в тому, як
+// вони цю чергу читають, тож механіка винесена сюди.
+//
+// edgeSourceStart() створює чергу, конфігурує пін і вішає обробник.
+// Повертає nullptr, якщо щось не вдалося — режим має це перевірити.
+// edgeSourceStop() знімає обробник і видаляє чергу (саме в такому порядку).
+
+QueueHandle_t edgeSourceStart();
+void          edgeSourceStop(QueueHandle_t &q);
+
+// Налаштовує пін на читання без переривань — для режиму polling.
+esp_err_t hwConfigButtonPolling();

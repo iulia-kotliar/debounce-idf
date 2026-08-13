@@ -1,8 +1,6 @@
 #include "mode.h"
 #include "hw.h"
 #include "stats.h"
-
-#include "driver/gpio.h"
 #include "esp_log.h"
 
 static const char *TAG = "polling";
@@ -12,18 +10,17 @@ enum class St : uint8_t { Released, MaybePress, Pressed, MaybeRelease };
 static St       state       = St::Released;
 static uint32_t last_poll   = 0;
 static uint32_t state_since = 0;
+static bool     ready       = false;
 
 static constexpr uint32_t POLL_MS   = 5;
 static constexpr uint32_t STABLE_MS = 20;
 
 static void enter() {
-    gpio_config_t cfg = {};
-    cfg.pin_bit_mask = (1ULL << PIN_BTN);
-    cfg.mode         = GPIO_MODE_INPUT;
-    cfg.pull_up_en   = g_pullup;
-    cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    cfg.intr_type    = GPIO_INTR_DISABLE;
-    gpio_config(&cfg);
+    ready = (hwConfigButtonPolling() == ESP_OK);
+    if (!ready) {
+        ESP_LOGE(TAG, "режим не запустився");
+        return;
+    }
 
     uint32_t now = millis();
     last_poll    = now;
@@ -32,10 +29,13 @@ static void enter() {
 }
 
 static void exit_() {
+    ready = false;
     // Переривань не вішали — знімати нічого.
 }
 
 static void tick() {
+    if (!ready) return;
+
     uint32_t now = millis();
     if (now - last_poll < POLL_MS) return;
     last_poll = now;
@@ -54,7 +54,7 @@ static void tick() {
             if (!pressed) {
                 state = St::Released;               // відскок, натискання не було
             } else if (now - state_since >= STABLE_MS) {
-                state = St::Pressed;                // рівень устоявся — це натискання
+                state = St::Pressed;                // рівень устоявся
                 statsReaction();
                 ESP_LOGI(TAG, "реакцій: %u", (unsigned)statsReactions());
             }
