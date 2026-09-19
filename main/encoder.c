@@ -18,8 +18,6 @@ static volatile uint8_t s_state = 0;
 static int32_t s_acc = 0;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
-/* Таблиця квадратурного декодування: індекс = (попередній AB << 2) | новий AB.
- * Неможливі переходи (брязкіт, пропущений фронт) дають 0. */
 static const int8_t QDEC_TABLE[16] = {
      0, -1, +1,  0,
     +1,  0,  0, -1,
@@ -56,7 +54,7 @@ void encoder_init(gpio_num_t clk, gpio_num_t dt, gpio_num_t sw)
     gpio_config_t btn_cfg = {
         .pin_bit_mask = (1ULL << sw),
         .mode         = GPIO_MODE_INPUT,
-        .pull_up_en   = GPIO_PULLUP_ENABLE,     /* на SW модуля немає підтяжки */
+        .pull_up_en   = GPIO_PULLUP_ENABLE,     
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
     };
@@ -112,7 +110,7 @@ bool encoder_button_pressed(void)
     }
     if (raw != stable && (now - changed_at) >= pdMS_TO_TICKS(BTN_DEBOUNCE_MS)) {
         stable = raw;
-        return stable == 0;     /* натиснута = 0 */
+        return stable == 0;    
     }
     return false;
 }

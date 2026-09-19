@@ -54,6 +54,6 @@ void buzzer_play(const buzzer_note_t *notes, size_t count)
 {
     for (size_t i = 0; i < count; i++) {
         buzzer_tone(notes[i].freq_hz, notes[i].duration_ms);
-        vTaskDelay(pdMS_TO_TICKS(20));      /* коротка пауза, щоб ноти не зливались */
+        vTaskDelay(pdMS_TO_TICKS(20));     
     }
 }

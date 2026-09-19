@@ -60,13 +60,11 @@ safe_event_t safe_on_tick(safe_t *s, int dir)
     }
     dir = (dir > 0) ? +1 : -1;
 
-    /* Той самий напрямок: інкремент поточної цифри (циклічно 0..9) */
     if (s->has_current && dir == s->dir) {
         s->current = (uint8_t)((s->current + 1) % 10);
         return SAFE_EV_DIGIT_CHANGED;
     }
 
-    /* Зміна напрямку: підтвердити попередню цифру */
     if (s->has_current) {
         s->entered[s->entered_count++] = s->current;
         s->has_current = false;
@@ -76,7 +74,6 @@ safe_event_t safe_on_tick(safe_t *s, int dir)
         }
     }
 
-    /* Почати нову цифру з 0 */
     s->current = 0;
     s->has_current = true;
     s->dir = (int8_t)dir;

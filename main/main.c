@@ -1,20 +1,3 @@
-/*
- * "Сейф" - введення пін-коду енкодером (ESP32-S3, ESP-IDF)
- *
- * Підключення:
- *   Енкодер KY-040: CLK -> GPIO4, DT -> GPIO5, SW -> GPIO6, + -> 3V3, GND -> GND
- *   Бузер:          GPIO7 -> R1 1k -> база Q1 (BC547), колектор -> BZ1 -> +5V, D1 паралельно BZ1
- *   Серво SG90:     PWM -> GPIO14, + -> 5V, GND -> GND, C1 470 мкФ між 5V і GND
- *
- * Як вводити код (приклад для 2-0-2-6):
- *   CW  x3  -> 0,1,2          (перший тік = 0, далі +1)
- *   CCW x1  -> підтвердили 2, нова цифра = 0
- *   CW  x3  -> підтвердили 0, нова цифра 0,1,2
- *   CCW x7  -> підтвердили 2, нова цифра 0..6
- *   CW  x1  -> підтвердили 6 -> перевірка коду
- *   Кнопка  -> скидання (це теж спроба). У відкритому стані кнопка закриває замок.
- */
-
 #include <stdio.h>
 #include <stdint.h>
 #include "freertos/FreeRTOS.h"
@@ -26,17 +9,15 @@
 #include "servo.h"
 #include "safe.h"
 
-/* ---------- Піни ---------- */
 #define ENC_CLK_PIN         GPIO_NUM_4
 #define ENC_DT_PIN          GPIO_NUM_5
 #define ENC_SW_PIN          GPIO_NUM_6
 #define BUZZER_PIN          GPIO_NUM_7
 #define SERVO_PIN           GPIO_NUM_14
 
-/* ---------- Налаштування сейфа ---------- */
 static const uint8_t SAFE_CODE[] = { 2, 0, 2, 6 };
 #define SAFE_MAX_ATTEMPTS   3
-#define SHOW_DIGITS         1       /* 0 - показувати '*' замість цифр */
+#define SHOW_DIGITS         1      
 
 #define SERVO_LOCKED_DEG    10
 #define SERVO_OPEN_DEG      100
@@ -46,7 +27,6 @@ static const uint8_t SAFE_CODE[] = { 2, 0, 2, 6 };
 
 static const char *TAG = "SAFE";
 
-/* ---------- Мелодії ---------- */
 static const buzzer_note_t MELODY_START[] = {
     { 1047, 60 }, { 1568, 80 },
 };
@@ -69,7 +49,6 @@ static const buzzer_note_t MELODY_ALARM[] = {    /* сирена */
 #define TICK_FREQ_HZ        2000
 #define TICK_MS             20
 
-/* ---------- Консоль ---------- */
 static char digit_char(uint8_t d)
 {
     return SHOW_DIGITS ? (char)('0' + d) : '*';
@@ -81,7 +60,6 @@ static void print_prompt(const safe_t *s)
     fflush(stdout);
 }
 
-/* ---------- Реакції на події ---------- */
 static void on_locked_out(void)
 {
     encoder_disable();
@@ -101,7 +79,6 @@ static void handle_event(safe_t *s, safe_event_t ev)
 {
     switch (ev) {
     case SAFE_EV_DIGIT_STARTED:
-        /* пробіл між цифрами; для першої цифри - без нього */
         printf("%s%c", s->entered_count ? " " : "", digit_char(s->current));
         fflush(stdout);
         buzzer_tone(TICK_FREQ_HZ, TICK_MS);
@@ -136,7 +113,7 @@ static void handle_event(safe_t *s, safe_event_t ev)
 
     case SAFE_EV_LOCKOUT:
         printf("  -> FAIL\n");
-        on_locked_out();            /* не повертається */
+        on_locked_out();           
         break;
 
     case SAFE_EV_CLOSED:
@@ -151,8 +128,6 @@ static void handle_event(safe_t *s, safe_event_t ev)
         return;
     }
 
-    /* Поки грала мелодія, енкодер міг накрутити зайве - відкидаємо,
-     * але не після тіків, інакше загубимо швидке обертання. */
     if (ev != SAFE_EV_DIGIT_STARTED && ev != SAFE_EV_DIGIT_CHANGED) {
         encoder_discard();
     }
@@ -189,7 +164,6 @@ void app_main(void)
             safe_event_t ev = safe_on_tick(&safe, dir);
             handle_event(&safe, ev);
 
-            /* Код перевірено: решту тіків цієї пачки не застосовуємо */
             if (ev != SAFE_EV_DIGIT_STARTED && ev != SAFE_EV_DIGIT_CHANGED) {
                 break;
             }

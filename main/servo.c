@@ -10,10 +10,9 @@
 #define SERVO_FREQ_HZ       50
 #define SERVO_RES_BITS      LEDC_TIMER_14_BIT
 #define SERVO_MAX_DUTY      ((1U << SERVO_RES_BITS) - 1)
-#define SERVO_PERIOD_US     (1000000U / SERVO_FREQ_HZ)  /* 20000 us */
-#define SERVO_MIN_US        500U                        /* 0°   */
-#define SERVO_MAX_US        2500U                       /* 180° */
-
+#define SERVO_PERIOD_US     (1000000U / SERVO_FREQ_HZ)  
+#define SERVO_MIN_US        500U                        
+#define SERVO_MAX_US        2500U                      
 static const char *TAG = "SERVO";
 
 void servo_init(gpio_num_t pin)
