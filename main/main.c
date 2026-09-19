@@ -1,141 +1,202 @@
+/*
+ * "Сейф" - введення пін-коду енкодером (ESP32-S3, ESP-IDF)
+ *
+ * Підключення:
+ *   Енкодер KY-040: CLK -> GPIO4, DT -> GPIO5, SW -> GPIO6, + -> 3V3, GND -> GND
+ *   Бузер:          GPIO7 -> R1 1k -> база Q1 (BC547), колектор -> BZ1 -> +5V, D1 паралельно BZ1
+ *   Серво SG90:     PWM -> GPIO14, + -> 5V, GND -> GND, C1 470 мкФ між 5V і GND
+ *
+ * Як вводити код (приклад для 2-0-2-6):
+ *   CW  x3  -> 0,1,2          (перший тік = 0, далі +1)
+ *   CCW x1  -> підтвердили 2, нова цифра = 0
+ *   CW  x3  -> підтвердили 0, нова цифра 0,1,2
+ *   CCW x7  -> підтвердили 2, нова цифра 0..6
+ *   CW  x1  -> підтвердили 6 -> перевірка коду
+ *   Кнопка  -> скидання (це теж спроба). У відкритому стані кнопка закриває замок.
+ */
+
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/ledc.h"
-#include "esp_adc/adc_oneshot.h"
-#include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
 
-static const char *TAG = "servo_pot";
+#include "encoder.h"
+#include "buzzer.h"
+#include "servo.h"
+#include "safe.h"
 
-#define SERVO_GPIO          5
-#define SERVO_FREQ_HZ       50
-#define SERVO_PERIOD_US     20000
-#define LEDC_RES_BITS       14
-#define SERVO_MIN_US        500     
-#define SERVO_MAX_US        2400   
-#define SERVO_RANGE_DEG     180
-#define SERVO_INVERT        0       
+/* ---------- Піни ---------- */
+#define ENC_CLK_PIN         GPIO_NUM_4
+#define ENC_DT_PIN          GPIO_NUM_5
+#define ENC_SW_PIN          GPIO_NUM_6
+#define BUZZER_PIN          GPIO_NUM_7
+#define SERVO_PIN           GPIO_NUM_14
 
-#define POT_ADC_UNIT        ADC_UNIT_1
-#define POT_ADC_CHANNEL     ADC_CHANNEL_0    
-#define POT_ADC_ATTEN       ADC_ATTEN_DB_12  
-#define POT_TRAVEL_DEG      270     
-#define POT_VCC_MV          3300    
-#define ADC_SAMPLES         16      
+/* ---------- Налаштування сейфа ---------- */
+static const uint8_t SAFE_CODE[] = { 2, 0, 2, 6 };
+#define SAFE_MAX_ATTEMPTS   3
+#define SHOW_DIGITS         1       /* 0 - показувати '*' замість цифр */
 
-#define LOOP_PERIOD_MS      20
-#define HYSTERESIS_X10      7      
+#define SERVO_LOCKED_DEG    10
+#define SERVO_OPEN_DEG      100
 
-static adc_oneshot_unit_handle_t s_adc;
-static adc_cali_handle_t s_cali;
-static bool s_cali_ok;
+#define ALARM_REPEATS       5
+#define LOOP_PERIOD_MS      10
 
-static void servo_init(void)
+static const char *TAG = "SAFE";
+
+/* ---------- Мелодії ---------- */
+static const buzzer_note_t MELODY_START[] = {
+    { 1047, 60 }, { 1568, 80 },
+};
+static const buzzer_note_t MELODY_OK[] = {
+    { 523, 120 }, { 659, 120 }, { 784, 120 }, { 1047, 300 },
+};
+static const buzzer_note_t MELODY_WRONG[] = {
+    { 330, 200 }, { 220, 350 },
+};
+static const buzzer_note_t MELODY_RESET[] = {
+    { 440, 80 }, { 0, 40 }, { 440, 80 },
+};
+static const buzzer_note_t MELODY_CLOSED[] = {
+    { 784, 100 }, { 523, 150 },
+};
+static const buzzer_note_t MELODY_ALARM[] = {    /* сирена */
+    { 880, 250 }, { 660, 250 }, { 880, 250 }, { 660, 250 },
+};
+
+#define TICK_FREQ_HZ        2000
+#define TICK_MS             20
+
+/* ---------- Консоль ---------- */
+static char digit_char(uint8_t d)
 {
-    ledc_timer_config_t timer = {
-        .speed_mode      = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_RES_BITS,
-        .timer_num       = LEDC_TIMER_0,
-        .freq_hz         = SERVO_FREQ_HZ,
-        .clk_cfg         = LEDC_AUTO_CLK,
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&timer));
-
-    ledc_channel_config_t ch = {
-        .gpio_num   = SERVO_GPIO,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel    = LEDC_CHANNEL_0,
-        .timer_sel  = LEDC_TIMER_0,
-        .duty       = 0,
-        .hpoint     = 0,
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&ch));
+    return SHOW_DIGITS ? (char)('0' + d) : '*';
 }
 
-static void servo_write_x10(int angle_x10)
+static void print_prompt(const safe_t *s)
 {
-    if (angle_x10 < 0)                    angle_x10 = 0;
-    if (angle_x10 > SERVO_RANGE_DEG * 10) angle_x10 = SERVO_RANGE_DEG * 10;
-#if SERVO_INVERT
-    angle_x10 = SERVO_RANGE_DEG * 10 - angle_x10;
-#endif
-    uint32_t pulse_us = SERVO_MIN_US +
-        (uint32_t)(SERVO_MAX_US - SERVO_MIN_US) * angle_x10 / (SERVO_RANGE_DEG * 10);
-    uint32_t duty = (pulse_us * (1U << LEDC_RES_BITS)) / SERVO_PERIOD_US;
-
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
+    printf("\n[Attempt %u/%u] Code: ", safe_attempt_number(s), s->max_attempts);
+    fflush(stdout);
 }
 
-static void pot_init(void)
+/* ---------- Реакції на події ---------- */
+static void on_locked_out(void)
 {
-    adc_oneshot_unit_init_cfg_t unit_cfg = { .unit_id = POT_ADC_UNIT };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &s_adc));
+    encoder_disable();
+    ESP_LOGE(TAG, "No attempts left. ALARM! Device locked until reboot.");
 
-    adc_oneshot_chan_cfg_t ch_cfg = {
-        .atten    = POT_ADC_ATTEN,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc, POT_ADC_CHANNEL, &ch_cfg));
-
-    adc_cali_curve_fitting_config_t cali_cfg = {
-        .unit_id  = POT_ADC_UNIT,
-        .chan     = POT_ADC_CHANNEL,
-        .atten    = POT_ADC_ATTEN,
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-    };
-    s_cali_ok = (adc_cali_create_scheme_curve_fitting(&cali_cfg, &s_cali) == ESP_OK);
-    ESP_LOGI(TAG, "ADC calibration: %s", s_cali_ok ? "curve fitting" : "not available, raw fallback");
-}
-
-static int pot_read_mv(void)
-{
-    int sum = 0;
-    for (int i = 0; i < ADC_SAMPLES; i++) {
-        int raw = 0, mv = 0;
-        ESP_ERROR_CHECK(adc_oneshot_read(s_adc, POT_ADC_CHANNEL, &raw));
-        if (s_cali_ok) {
-            adc_cali_raw_to_voltage(s_cali, raw, &mv);
-        } else {
-            mv = raw * 3100 / 4095;   // груба оцінка без калібрування
-        }
-        sum += mv;
+    for (int i = 0; i < ALARM_REPEATS; i++) {
+        BUZZER_PLAY(MELODY_ALARM);
     }
-    return sum / ADC_SAMPLES;
+
+    ESP_LOGE(TAG, "LOCKED. Press RESET (EN) on the board to restart.");
+    while (1) {
+        vTaskDelay(portMAX_DELAY);
+    }
 }
 
-static int pot_angle_x10(int mv)
+static void handle_event(safe_t *s, safe_event_t ev)
 {
-    return (int)((int64_t)mv * POT_TRAVEL_DEG * 10 / POT_VCC_MV);
+    switch (ev) {
+    case SAFE_EV_DIGIT_STARTED:
+        /* пробіл між цифрами; для першої цифри - без нього */
+        printf("%s%c", s->entered_count ? " " : "", digit_char(s->current));
+        fflush(stdout);
+        buzzer_tone(TICK_FREQ_HZ, TICK_MS);
+        break;
+
+    case SAFE_EV_DIGIT_CHANGED:
+        printf("\b%c", digit_char(s->current));  /* затираємо попередню цифру */
+        fflush(stdout);
+        buzzer_tone(TICK_FREQ_HZ, TICK_MS);
+        break;
+
+    case SAFE_EV_CODE_OK:
+        printf("  -> OK\n");
+        ESP_LOGI(TAG, "ACCESS GRANTED. Lock opened. Press button to close.");
+        servo_set_angle(SERVO_OPEN_DEG);
+        BUZZER_PLAY(MELODY_OK);
+        break;
+
+    case SAFE_EV_CODE_WRONG:
+        printf("  -> WRONG\n");
+        ESP_LOGW(TAG, "Wrong code. Attempts left: %u", safe_attempts_left(s));
+        BUZZER_PLAY(MELODY_WRONG);
+        print_prompt(s);
+        break;
+
+    case SAFE_EV_RESET:
+        printf("  -> RESET\n");
+        ESP_LOGW(TAG, "Input reset. Attempts left: %u", safe_attempts_left(s));
+        BUZZER_PLAY(MELODY_RESET);
+        print_prompt(s);
+        break;
+
+    case SAFE_EV_LOCKOUT:
+        printf("  -> FAIL\n");
+        on_locked_out();            /* не повертається */
+        break;
+
+    case SAFE_EV_CLOSED:
+        ESP_LOGI(TAG, "Lock closed.");
+        servo_set_angle(SERVO_LOCKED_DEG);
+        BUZZER_PLAY(MELODY_CLOSED);
+        print_prompt(s);
+        break;
+
+    case SAFE_EV_NONE:
+    default:
+        return;
+    }
+
+    /* Поки грала мелодія, енкодер міг накрутити зайве - відкидаємо,
+     * але не після тіків, інакше загубимо швидке обертання. */
+    if (ev != SAFE_EV_DIGIT_STARTED && ev != SAFE_EV_DIGIT_CHANGED) {
+        encoder_discard();
+    }
 }
 
 void app_main(void)
 {
-    servo_init();
-    pot_init();
+    static safe_t safe;
 
-    ESP_LOGI(TAG, "Pot travel %d deg, servo range %d deg -> working range 0..%d deg",
-             POT_TRAVEL_DEG, SERVO_RANGE_DEG, SERVO_RANGE_DEG);
+    if (!safe_init(&safe, SAFE_CODE, sizeof(SAFE_CODE), SAFE_MAX_ATTEMPTS)) {
+        ESP_LOGE(TAG, "Invalid safe config (code length 1..%d, digits 0..9)", SAFE_MAX_DIGITS);
+        return;
+    }
 
-    int last_x10 = -1000;   
+    encoder_init(ENC_CLK_PIN, ENC_DT_PIN, ENC_SW_PIN);
+    buzzer_init(BUZZER_PIN);
+    servo_init(SERVO_PIN);
+
+    servo_set_angle(SERVO_LOCKED_DEG);
+    BUZZER_PLAY(MELODY_START);
+    encoder_discard();
+
+    ESP_LOGI(TAG, "=== Safe ready: %u digits, %u attempts ===", safe.code_len, safe.max_attempts);
+    ESP_LOGI(TAG, "Rotate: +1 | change direction: next digit | button: reset");
+    print_prompt(&safe);
 
     while (1) {
-        int mv      = pot_read_mv();
-        int pot_x10 = pot_angle_x10(mv);
+        int detents = encoder_take_detents();
 
-        bool clipped = pot_x10 > SERVO_RANGE_DEG * 10;
-        int angle_x10 = clipped ? SERVO_RANGE_DEG * 10 : pot_x10;
+        while (detents != 0) {
+            int dir = (detents > 0) ? +1 : -1;
+            detents -= dir;
 
-        if (abs(angle_x10 - last_x10) >= HYSTERESIS_X10 ||
-            (clipped && last_x10 != SERVO_RANGE_DEG * 10)) {
-            last_x10 = angle_x10;
-            servo_write_x10(angle_x10);
-            ESP_LOGI(TAG, "angle from left: %3d.%d deg  (pot %4d mV)%s",
-                     angle_x10 / 10, angle_x10 % 10, mv,
-                     clipped ? "  [limit]" : "");
+            safe_event_t ev = safe_on_tick(&safe, dir);
+            handle_event(&safe, ev);
+
+            /* Код перевірено: решту тіків цієї пачки не застосовуємо */
+            if (ev != SAFE_EV_DIGIT_STARTED && ev != SAFE_EV_DIGIT_CHANGED) {
+                break;
+            }
+        }
+
+        if (encoder_button_pressed()) {
+            handle_event(&safe, safe_on_button(&safe));
         }
 
         vTaskDelay(pdMS_TO_TICKS(LOOP_PERIOD_MS));
