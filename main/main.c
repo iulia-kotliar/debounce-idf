@@ -1,154 +1,110 @@
-#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
 #include "driver/ledc.h"
-#include "esp_adc/adc_oneshot.h"
+#include "esp_log.h"
 
-static const char *TAG = "pwm";
+static const char *TAG = "valkyries";
 
-#define LED_GPIO            15
-#define MOTOR_GPIO          16
+#define BUZZER_GPIO      4
+#define LEDC_MODE        LEDC_LOW_SPEED_MODE
+#define LEDC_TIMER       LEDC_TIMER_0
+#define LEDC_CHANNEL     LEDC_CHANNEL_0
+#define LEDC_RESOLUTION  LEDC_TIMER_10_BIT   
+#define DUTY_ON          512                 
+#define NOTE_GAP_MS      15                
 
-#define POT_LED_CHANNEL     ADC_CHANNEL_0   /* GPIO1 */
-#define POT_MOTOR_CHANNEL   ADC_CHANNEL_1   /* GPIO2 */
+#define REST     0
+#define NOTE_FS4 370
+#define NOTE_A4  440
+#define NOTE_B4  494
+#define NOTE_D5  587
+#define NOTE_FS5 740
+#define NOTE_A5  880
+#define NOTE_B5  988
 
-/* ---------- PWM ---------- */
-#define PWM_RESOLUTION      LEDC_TIMER_10_BIT
-#define PWM_MAX             ((1 << 10) - 1)     /* 1023 */
+#define TEMPO_UNIT 110
+#define S   (TEMPO_UNIT * 1)   
+#define L   (TEMPO_UNIT * 3)   
+#define H   (TEMPO_UNIT * 6)  
 
-#define LED_TIMER           LEDC_TIMER_0
-#define LED_CHANNEL         LEDC_CHANNEL_0
-#define LED_FREQ_HZ         5000               
+typedef struct {
+    uint32_t freq_hz;  
+    uint32_t dur_ms;
+} note_t;
 
-#define MOTOR_TIMER         LEDC_TIMER_1
-#define MOTOR_CHANNEL       LEDC_CHANNEL_1
-#define MOTOR_FREQ_HZ       20000              
+#define GALLOP(low, root, third) \
+    { low, S }, { root, L }, { low, S }, { root, L }, { third, H }, { root, H }
 
-/* ---------- АЦП ---------- */
-#define ADC_MAX             4095
-#define ADC_SAMPLES         16                 
+static const note_t score[] = {
+    GALLOP(NOTE_FS4, NOTE_B4,  NOTE_D5),    
+    GALLOP(NOTE_B4,  NOTE_D5,  NOTE_FS5),   
+    GALLOP(NOTE_D5,  NOTE_FS5, NOTE_A5),    
+    GALLOP(NOTE_FS5, NOTE_A5,  NOTE_B5),    
+    { REST, L },
+    GALLOP(NOTE_FS4, NOTE_B4,  NOTE_D5),    
+    { NOTE_B4, H * 2 },                     
+};
 
-/* ---------- Двигун ---------- */
-#define MOTOR_DEAD_ZONE     40               
-#define MOTOR_MIN_DUTY      350               
+#define SCORE_LEN (sizeof(score) / sizeof(score[0]))
 
-static adc_oneshot_unit_handle_t s_adc1;
-
-
-static void pwm_init(void)
+static void buzzer_init(void)
 {
-    const ledc_timer_config_t led_timer = {
-        .speed_mode      = LEDC_LOW_SPEED_MODE,
-        .timer_num       = LED_TIMER,
-        .duty_resolution = PWM_RESOLUTION,
-        .freq_hz         = LED_FREQ_HZ,
+    ledc_timer_config_t timer = {
+        .speed_mode      = LEDC_MODE,
+        .duty_resolution = LEDC_RESOLUTION,
+        .timer_num       = LEDC_TIMER,
+        .freq_hz         = 1000,
         .clk_cfg         = LEDC_AUTO_CLK,
     };
-    ESP_ERROR_CHECK(ledc_timer_config(&led_timer));
+    ESP_ERROR_CHECK(ledc_timer_config(&timer));
 
-    const ledc_timer_config_t motor_timer = {
-        .speed_mode      = LEDC_LOW_SPEED_MODE,
-        .timer_num       = MOTOR_TIMER,
-        .duty_resolution = PWM_RESOLUTION,
-        .freq_hz         = MOTOR_FREQ_HZ,
-        .clk_cfg         = LEDC_AUTO_CLK,
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&motor_timer));
-
-    const ledc_channel_config_t led_channel = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel    = LED_CHANNEL,
-        .timer_sel  = LED_TIMER,
-        .gpio_num   = LED_GPIO,
+    ledc_channel_config_t channel = {
+        .gpio_num   = BUZZER_GPIO,
+        .speed_mode = LEDC_MODE,
+        .channel    = LEDC_CHANNEL,
+        .timer_sel  = LEDC_TIMER,
         .duty       = 0,
         .hpoint     = 0,
     };
-    ESP_ERROR_CHECK(ledc_channel_config(&led_channel));
-
-    const ledc_channel_config_t motor_channel = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel    = MOTOR_CHANNEL,
-        .timer_sel  = MOTOR_TIMER,
-        .gpio_num   = MOTOR_GPIO,
-        .duty       = 0,
-        .hpoint     = 0,
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&motor_channel));
+    ESP_ERROR_CHECK(ledc_channel_config(&channel));
 }
 
-static void adc_init(void)
+static void buzzer_set_duty(uint32_t duty)
 {
-    const adc_oneshot_unit_init_cfg_t unit_cfg = {
-        .unit_id = ADC_UNIT_1,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &s_adc1));
-
-    const adc_oneshot_chan_cfg_t chan_cfg = {
-        .bitwidth = ADC_BITWIDTH_12,
-        .atten    = ADC_ATTEN_DB_12,   
-    };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc1, POT_LED_CHANNEL, &chan_cfg));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(s_adc1, POT_MOTOR_CHANNEL, &chan_cfg));
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
 }
 
-static int adc_read_avg(adc_channel_t channel)
+static void play_note(const note_t *n)
 {
-    int sum = 0;
-    for (int i = 0; i < ADC_SAMPLES; i++) {
-        int raw = 0;
-        ESP_ERROR_CHECK(adc_oneshot_read(s_adc1, channel, &raw));
-        sum += raw;
-    }
-    return sum / ADC_SAMPLES;
-}
-
-static void set_duty(ledc_channel_t channel, uint32_t duty)
-{
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
-}
-
-static uint32_t led_duty_from_adc(int raw)
-{
-    uint32_t linear = (uint32_t)raw * PWM_MAX / ADC_MAX;
-    return linear * linear / PWM_MAX;
-}
-
-static uint32_t motor_duty_from_adc(int raw)
-{
-    if (raw < MOTOR_DEAD_ZONE) {
-        return 0;
+    if (n->freq_hz == REST) {
+        buzzer_set_duty(0);
+        vTaskDelay(pdMS_TO_TICKS(n->dur_ms));
+        return;
     }
 
-    uint32_t span  = ADC_MAX - MOTOR_DEAD_ZONE;
-    uint32_t value = (uint32_t)(raw - MOTOR_DEAD_ZONE);
+    ESP_LOGI(TAG, "%4lu Hz  %4lu ms", (unsigned long)n->freq_hz, (unsigned long)n->dur_ms);
 
-    return MOTOR_MIN_DUTY + value * (PWM_MAX - MOTOR_MIN_DUTY) / span;
+    ESP_ERROR_CHECK(ledc_set_freq(LEDC_MODE, LEDC_TIMER, n->freq_hz));
+    buzzer_set_duty(DUTY_ON);
+
+    uint32_t sound_ms = n->dur_ms > NOTE_GAP_MS ? n->dur_ms - NOTE_GAP_MS : n->dur_ms;
+    vTaskDelay(pdMS_TO_TICKS(sound_ms));
+
+    buzzer_set_duty(0);
+    vTaskDelay(pdMS_TO_TICKS(n->dur_ms - sound_ms));
 }
 
 void app_main(void)
 {
-    pwm_init();
-    adc_init();
-
-    ESP_LOGI(TAG, "LED: GPIO%d @ %d Hz, timer %d", LED_GPIO, LED_FREQ_HZ, LED_TIMER);
-    ESP_LOGI(TAG, "Motor: GPIO%d @ %d Hz, timer %d", MOTOR_GPIO, MOTOR_FREQ_HZ, MOTOR_TIMER);
+    buzzer_init();
+    ESP_LOGI(TAG, "Ride of the Valkyries — %u notes", (unsigned)SCORE_LEN);
 
     while (1) {
-        int led_raw   = adc_read_avg(POT_LED_CHANNEL);
-        int motor_raw = adc_read_avg(POT_MOTOR_CHANNEL);
-
-        uint32_t led_duty   = led_duty_from_adc(led_raw);
-        uint32_t motor_duty = motor_duty_from_adc(motor_raw);
-
-        set_duty(LED_CHANNEL, led_duty);
-        set_duty(MOTOR_CHANNEL, motor_duty);
-
-        ESP_LOGI(TAG, "LED  adc=%4d duty=%4lu (%3lu%%) | MOTOR adc=%4d duty=%4lu (%3lu%%)",
-                 led_raw,   (unsigned long)led_duty,   (unsigned long)(led_duty   * 100 / PWM_MAX),
-                 motor_raw, (unsigned long)motor_duty, (unsigned long)(motor_duty * 100 / PWM_MAX));
-
-        vTaskDelay(pdMS_TO_TICKS(50));
+        for (size_t i = 0; i < SCORE_LEN; i++) {
+            play_note(&score[i]);
+        }
+        ESP_LOGI(TAG, "--- кінець, повтор через 3 с ---");
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
