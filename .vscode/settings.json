@@ -1,7 +1,6 @@
 {
   "idf.currentSetup": "C:\\esp\\v6.0.2\\esp-idf",
   "idf.flashType": "UART",
-  "idf.portWin": "COM6",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
   ],
@@ -13,5 +12,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=c:\\Users\\iulko\\debounce-idf\\build"
-  ]
+  ],
+  "idf.port": "COM6"
 }
