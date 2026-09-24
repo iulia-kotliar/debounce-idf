@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="840" viewBox="0 0 1320 840" font-family="DejaVu Sans, Arial, sans-serif">
+  <rect width="1320" height="840" fill="#ffffff"/>
+
+  <text x="660" y="38" text-anchor="middle" font-size="22" font-weight="bold" fill="#222">UART: кнопка STM32 → світлодіод ESP32</text>
+
+  <!-- ========== USB-TTL ========== -->
+  <rect x="60" y="90" width="220" height="140" rx="10" fill="#1e5aa8"/>
+  <text x="170" y="118" text-anchor="middle" font-size="16" font-weight="bold" fill="#fff">USB-TTL (CH340)</text>
+  <text x="170" y="214" text-anchor="middle" font-size="12" fill="#dbe7ff">TX, VCC — не підключені</text>
+  <text x="262" y="135" text-anchor="end" font-size="14" fill="#fff">RX</text>
+  <text x="262" y="185" text-anchor="end" font-size="14" fill="#fff">GND</text>
+  <circle cx="280" cy="130" r="5" fill="#f1c40f"/>
+  <circle cx="280" cy="180" r="5" fill="#f1c40f"/>
+  <text x="170" y="252" text-anchor="middle" font-size="13" fill="#555">USB → ноутбук</text>
+
+  <!-- ========== ST-LINK ========== -->
+  <rect x="60" y="500" width="220" height="190" rx="10" fill="#6c3483"/>
+  <text x="170" y="528" text-anchor="middle" font-size="16" font-weight="bold" fill="#fff">ST-LINK V2</text>
+  <text x="262" y="545" text-anchor="end" font-size="14" fill="#fff">3V3</text>
+  <text x="262" y="585" text-anchor="end" font-size="14" fill="#fff">SWDIO</text>
+  <text x="262" y="625" text-anchor="end" font-size="14" fill="#fff">SWCLK</text>
+  <text x="262" y="665" text-anchor="end" font-size="14" fill="#fff">GND</text>
+  <circle cx="280" cy="540" r="5" fill="#f1c40f"/>
+  <circle cx="280" cy="580" r="5" fill="#f1c40f"/>
+  <circle cx="280" cy="620" r="5" fill="#f1c40f"/>
+  <circle cx="280" cy="660" r="5" fill="#f1c40f"/>
+  <text x="170" y="712" text-anchor="middle" font-size="13" fill="#555">USB → ноутбук</text>
+
+  <!-- ========== Black Pill ========== -->
+  <rect x="400" y="60" width="260" height="650" rx="12" fill="#222"/>
+  <text x="530" y="92" text-anchor="middle" font-size="17" font-weight="bold" fill="#fff">STM32F411</text>
+  <text x="530" y="114" text-anchor="middle" font-size="14" fill="#ccc">WeAct Black Pill</text>
+
+  <!-- left pins -->
+  <circle cx="400" cy="130" r="5" fill="#f1c40f"/>
+  <circle cx="400" cy="180" r="5" fill="#f1c40f"/>
+  <text x="414" y="135" font-size="14" fill="#fff">PA9 (USART1 TX)</text>
+  <text x="414" y="185" font-size="14" fill="#fff">GND</text>
+
+  <text x="414" y="515" font-size="12" fill="#aaa">SWD-роз'єм</text>
+  <circle cx="400" cy="540" r="5" fill="#f1c40f"/>
+  <circle cx="400" cy="580" r="5" fill="#f1c40f"/>
+  <circle cx="400" cy="620" r="5" fill="#f1c40f"/>
+  <circle cx="400" cy="660" r="5" fill="#f1c40f"/>
+  <text x="414" y="545" font-size="14" fill="#fff">3V3</text>
+  <text x="414" y="585" font-size="14" fill="#fff">SWDIO</text>
+  <text x="414" y="625" font-size="14" fill="#fff">SWCLK</text>
+  <text x="414" y="665" font-size="14" fill="#fff">GND</text>
+
+  <!-- right pins -->
+  <circle cx="660" cy="280" r="5" fill="#f1c40f"/>
+  <circle cx="660" cy="330" r="5" fill="#f1c40f"/>
+  <circle cx="660" cy="380" r="5" fill="#f1c40f"/>
+  <text x="646" y="285" text-anchor="end" font-size="14" fill="#fff">PA2 (USART2 TX)</text>
+  <text x="646" y="335" text-anchor="end" font-size="14" fill="#fff">PA3 (USART2 RX)</text>
+  <text x="646" y="385" text-anchor="end" font-size="14" fill="#fff">GND</text>
+
+  <!-- onboard -->
+  <rect x="430" y="410" width="200" height="80" rx="8" fill="#333" stroke="#555"/>
+  <text x="530" y="432" text-anchor="middle" font-size="12" fill="#aaa">на платі</text>
+  <text x="530" y="455" text-anchor="middle" font-size="14" fill="#fff">KEY → PA0 (pull-up)</text>
+  <text x="530" y="478" text-anchor="middle" font-size="14" fill="#fff">LED → PC13</text>
+
+  <!-- ========== ESP32-S3 ========== -->
+  <rect x="860" y="200" width="260" height="380" rx="12" fill="#2c2c2c"/>
+  <text x="990" y="232" text-anchor="middle" font-size="17" font-weight="bold" fill="#fff">ESP32-S3</text>
+  <text x="990" y="254" text-anchor="middle" font-size="14" fill="#ccc">YD N16R8</text>
+
+  <circle cx="860" cy="280" r="5" fill="#f1c40f"/>
+  <circle cx="860" cy="330" r="5" fill="#f1c40f"/>
+  <circle cx="860" cy="380" r="5" fill="#f1c40f"/>
+  <text x="874" y="285" font-size="14" fill="#fff">GPIO18 (RX)</text>
+  <text x="874" y="335" font-size="14" fill="#fff">GPIO17 (TX)</text>
+  <text x="874" y="385" font-size="14" fill="#fff">GND</text>
+
+  <circle cx="1120" cy="300" r="5" fill="#f1c40f"/>
+  <circle cx="1120" cy="480" r="5" fill="#f1c40f"/>
+  <text x="1106" y="305" text-anchor="end" font-size="14" fill="#fff">GPIO4</text>
+  <text x="1106" y="485" text-anchor="end" font-size="14" fill="#fff">GND</text>
+
+  <text x="990" y="552" text-anchor="middle" font-size="13" fill="#ccc">USB-C «UART»</text>
+  <text x="990" y="605" text-anchor="middle" font-size="13" fill="#555">USB → ноутбук</text>
+
+  <!-- ========== wires: USB-TTL ↔ Pill ========== -->
+  <line x1="285" y1="130" x2="395" y2="130" stroke="#16a085" stroke-width="4"/>
+  <line x1="285" y1="180" x2="395" y2="180" stroke="#333" stroke-width="4"/>
+  <text x="340" y="122" text-anchor="middle" font-size="12" fill="#16a085">лог 115200</text>
+
+  <!-- ========== wires: ST-LINK ↔ Pill ========== -->
+  <line x1="285" y1="540" x2="395" y2="540" stroke="#c0392b" stroke-width="4"/>
+  <line x1="285" y1="580" x2="395" y2="580" stroke="#8e44ad" stroke-width="4"/>
+  <line x1="285" y1="620" x2="395" y2="620" stroke="#8e44ad" stroke-width="4"/>
+  <line x1="285" y1="660" x2="395" y2="660" stroke="#333" stroke-width="4"/>
+
+  <!-- ========== wires: Pill ↔ ESP32 ========== -->
+  <line x1="665" y1="280" x2="855" y2="280" stroke="#e67e22" stroke-width="4"/>
+  <line x1="665" y1="330" x2="855" y2="330" stroke="#2980b9" stroke-width="4"/>
+  <line x1="665" y1="380" x2="855" y2="380" stroke="#333" stroke-width="4"/>
+  <text x="760" y="271" text-anchor="middle" font-size="13" fill="#e67e22">STM TX → ESP RX</text>
+  <text x="760" y="321" text-anchor="middle" font-size="13" fill="#2980b9">ESP TX → STM RX</text>
+  <text x="760" y="371" text-anchor="middle" font-size="13" fill="#333">спільна GND</text>
+  <text x="760" y="410" text-anchor="middle" font-size="12" fill="#777">9600 8N1</text>
+
+  <!-- ========== LED circuit ========== -->
+  <polyline points="1125,300 1220,300 1220,330" fill="none" stroke="#c0392b" stroke-width="4"/>
+  <rect x="1208" y="330" width="24" height="60" rx="3" fill="#f5deb3" stroke="#8b5a2b" stroke-width="2"/>
+  <text x="1242" y="355" font-size="13" fill="#333">220–330 Ω</text>
+  <line x1="1220" y1="390" x2="1220" y2="410" stroke="#c0392b" stroke-width="4"/>
+  <polygon points="1204,410 1236,410 1220,440" fill="#e74c3c" stroke="#922b21" stroke-width="2"/>
+  <line x1="1204" y1="441" x2="1236" y2="441" stroke="#922b21" stroke-width="3"/>
+  <line x1="1240" y1="418" x2="1254" y2="408" stroke="#e74c3c" stroke-width="2"/>
+  <line x1="1244" y1="428" x2="1258" y2="418" stroke="#e74c3c" stroke-width="2"/>
+  <text x="1242" y="450" font-size="13" fill="#333">LED</text>
+  <text x="1182" y="425" text-anchor="end" font-size="11" fill="#777">анод</text>
+  <text x="1182" y="446" text-anchor="end" font-size="11" fill="#777">катод</text>
+  <polyline points="1220,442 1220,480 1125,480" fill="none" stroke="#333" stroke-width="4"/>
+
+  <!-- ========== legend ========== -->
+  <line x1="40" y1="740" x2="1280" y2="740" stroke="#ddd" stroke-width="1"/>
+  <text x="60" y="772" font-size="14" fill="#333"><tspan font-weight="bold">Зв'язок:</tspan> STM32 USART2 ↔ ESP32 UART1, 9600 8N1   ·   <tspan font-weight="bold">Лог STM32:</tspan> USART1, 115200 (USB-TTL)</text>
+  <text x="60" y="800" font-size="14" fill="#333"><tspan font-weight="bold">Живлення:</tspan> STM32 — від ST-LINK, ESP32 — від USB-C. Лінії 3V3 між платами не з'єднані, спільна лише GND.</text>
+</svg>
